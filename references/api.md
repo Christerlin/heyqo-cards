@@ -180,7 +180,19 @@ is configured today rather than the one that issued it.
 Signed with **HMAC-SHA256 over the raw body**, hex, in `X-HeyQo-Signature`.
 Compute over the bytes as sent; re-serialising the parsed object will not match.
 
-Events seen: `customer.approved`, `customer.rejected`, `card.terminated`.
+Events seen in production:
+
+| Event | What to do with it |
+|---|---|
+| `customer.approved` / `customer.rejected` | the issuing bank's verdict on a cardholder |
+| `card.charged` / `card.funded` | money moved — **re-read the balance**, see below |
+| `card.declined` | nothing moved, so nothing to reconcile |
+| `card.terminated` | the card is closed |
+
+**Do not add up the amount on a spend event.** There is no event id and no
+timestamp, so deliveries cannot be deduplicated or ordered, and arithmetic on
+those terms drifts. Read `GET /cards/{id}` and take the balance it reports; the
+issuer's figure is the record and a duplicate delivery then costs nothing.
 
 - **No timestamp and no event id**, so there is no replay protection and nothing
   to deduplicate on. Make applying the same verdict twice a no-op by

@@ -127,9 +127,10 @@ every use is otherwise invisible in the revenue figures.
 - **Never refund a card balance you cannot verify.** Cancelling refunds the
   card's balance to the wallet. If your figure is stale and the issuer's is
   lower, the difference is money you just invented.
-- **The issuer's balance is the record.** There is no transaction list. Spending
-  is invisible until you pull `amount` and compare. Pull it on refresh and on
-  every webhook you receive.
+- **The issuer's balance is the record.** There is no transaction list, so a
+  balance cannot be explained by adding up movements — it can only be read. They
+  do send an event when a card is charged, and the right response to it is to
+  re-read the balance rather than to trust the amount on the event.
 - **File the card under its issuer.** A card outlives the setting that created
   it; route cancel, freeze, load and reveal by the card's own provider, never by
   whatever is configured today.
