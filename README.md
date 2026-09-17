@@ -38,19 +38,19 @@ and another tool will not read them.
 
 Everywhere else, point at it or paste it:
 
-- **Claude Code, the Claude Agent SDK, claude.ai** — drop it in the skills
+- **Claude Code, the Claude Agent SDK, claude.ai**: drop it in the skills
   directory and it loads itself when the work touches HeyQo.
-- **Cursor, Copilot, Windsurf, anything else** — `AGENTS.md` in this repo is
+- **Cursor, Copilot, Windsurf, anything else**: `AGENTS.md` in this repo is
   read by several of them directly. Otherwise reference `SKILL.md` and the file
   under `references/` that matches what you are doing, or copy the relevant
   section into whatever instruction file your tool uses.
-- **A person** — it is written to be read. Start with `SKILL.md`; the references
+- **A person**: it is written to be read. Start with `SKILL.md`; the references
   are for when you are actually writing the request.
 
 ## A note on figures
 
 Provider rates are deliberately left as placeholders. They differ per account
-and are not ours to publish — the reasoning and the formulas are here, the
+and are not ours to publish: the reasoning and the formulas are here, the
 numbers come from your own contract.
 
 ## Contributing

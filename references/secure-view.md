@@ -9,7 +9,7 @@ call moves the whole system into a different compliance regime.
 
 ---
 
-## Creating one — `POST /cards/{id}/secure-view`
+## Creating one: `POST /cards/{id}/secure-view`
 
 ```json
 {
@@ -89,7 +89,7 @@ side. Ask them for the option instead.
 ## The lifetime
 
 `expires_in` is 90 seconds, single use. When it lapses the page does not go
-blank — it paints its own "this secure card view has expired" panel over your
+blank: it paints its own "this secure card view has expired" panel over your
 card. Take the overlay down a second or two early so nobody sees it.
 
 Carry the lifetime back with the URL rather than hardcoding 90 anywhere.

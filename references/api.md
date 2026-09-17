@@ -1,9 +1,9 @@
-# HeyQo API — what the live API actually does
+# HeyQo API: what the live API actually does
 
 Established against the running API, sandbox and production. Where this
 contradicts their documentation, this is what the API did.
 
-Base URLs — the key's mode must match the URL, or you get a 403 with nothing in
+Base URLs: the key's mode must match the URL, or you get a 403 with nothing in
 the body that says so:
 
 ```
@@ -13,7 +13,7 @@ live     https://heyqo.cash/business/v1
 
 ---
 
-## 1. Auth — `POST /authentication/token`
+## 1. Auth: `POST /authentication/token`
 
 ```json
 { "client_id": "...", "secret_id": "..." }
@@ -36,20 +36,20 @@ Every response:
 ```
 
 - The payload is under `data`, never at the root.
-- Errors are in `message.error[]` and `type: "error"` — **a 200 can still be an
+- Errors are in `message.error[]` and `type: "error"`: **a 200 can still be an
   error**, so check both.
 - Their messages are the useful part: "The selected brand is invalid",
   "Customer with this external_ref already exists". Keep them.
 
 ---
 
-## 3. Cardholders — `POST /customers`
+## 3. Cardholders: `POST /customers`
 
 Takes the identity evidence: names, date of birth, document type and number,
 document images as base64, address, and the AML declarations.
 
 - **409** `Customer with this external_ref already exists` on a repeat. Adopt the
-  existing one rather than failing — otherwise that person can never be issued a
+  existing one rather than failing: otherwise that person can never be issued a
   card again.
 - **`?external_ref=` is accepted and ignored** on the listing. Asking for a
   reference that does not exist returns *every* customer. Match client-side or
@@ -64,7 +64,7 @@ This one is expensive to get wrong. The listing returns:
 ```
 
 **Card creation wants `local_id`.** Passing the listing's `id` returns
-`customer was not found` from `POST /cards` — for a customer that plainly
+`customer was not found` from `POST /cards`: for a customer that plainly
 exists, matched correctly, with status `ACTIVE`. `GET /customers/{id}` answers
 400 "something went wrong, please contact support", so the detail record is no
 help either.
@@ -77,7 +77,7 @@ URL will hand production a sandbox id forever.
 
 ---
 
-## 4. Cards — `POST /cards`
+## 4. Cards: `POST /cards`
 
 ```json
 { "customer_id": "<local_id>", "currency": "usd", "brand": "visa", "label": "..." }
@@ -97,7 +97,7 @@ The response:
 }
 ```
 
-**No number and no expiry.** The card is still being provisioned — their
+**No number and no expiry.** The card is still being provisioned: their
 dashboard shows "processing". Write the row as pending, send no welcome email
 quoting digits, and fill it in from `GET /cards/{id}` afterwards.
 
@@ -106,7 +106,7 @@ the real cost, and it is not always what you were quoted.
 
 ---
 
-## 5. Reading a card — `GET /cards/{id}`
+## 5. Reading a card: `GET /cards/{id}`
 
 ```json
 { "card": {
@@ -134,11 +134,11 @@ Three things to take from this shape:
 
 There is **no transaction list**. The balance is the record: pull it, compare it
 with yours, and record the difference as one movement. Two purchases between two
-pulls arrive as one line — say so rather than inventing per-merchant detail.
+pulls arrive as one line: say so rather than inventing per-merchant detail.
 
 ---
 
-## 6. Money — deposit and withdraw
+## 6. Money: deposit and withdraw
 
 ```
 POST /cards/{id}/deposit    { "amount": 36 }
@@ -170,7 +170,7 @@ PUT /cards/{id}/terminate
 ```
 
 `terminate` answers **404 "Card not found"** for a card that belongs to another
-issuer — which is what happens if you route every card through whatever provider
+issuer, which is what happens if you route every card through whatever provider
 is configured today rather than the one that issued it.
 
 ---
@@ -185,7 +185,7 @@ Events seen in production:
 | Event | What to do with it |
 |---|---|
 | `customer.approved` / `customer.rejected` | the issuing bank's verdict on a cardholder |
-| `card.charged` / `card.funded` | money moved — **re-read the balance**, see below |
+| `card.charged` / `card.funded` | money moved: **re-read the balance**, see below |
 | `card.declined` | nothing moved, so nothing to reconcile |
 | `card.terminated` | the card is closed |
 
@@ -199,6 +199,6 @@ issuer's figure is the record and a duplicate delivery then costs nothing.
   construction, comparing state rather than remembering deliveries.
 - One webhook configuration per account, with no sandbox/live switch. Confirm
   whether the same signing secret covers both.
-- Fail closed on a bad signature, and log the header *names* you received — a
+- Fail closed on a bad signature, and log the header *names* you received: a
   mismatch between the header they send and the one you read will otherwise
   401 every event in silence.

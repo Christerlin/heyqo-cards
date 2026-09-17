@@ -15,7 +15,7 @@ description: >-
 # HeyQo virtual cards
 
 HeyQo issues virtual Visa cards. It is a **white-label layer over Platnova**, and
-the issuing bank sits at the far end of that chain — which decides more than it
+the issuing bank sits at the far end of that chain, which decides more than it
 first appears (see "Who owns the cardholder" below).
 
 → API quirks, field by field: [references/api.md](references/api.md)
@@ -35,8 +35,8 @@ Every response is `{ message, data, type }`. Errors carry their reason in
 debugging "failed: 400" against an API that names the problem in plain words.
 
 **2. Nothing is called what you would expect.**
-The balance is `amount`. The card's own details — last four, expiry, name,
-masked PAN, billing address — are nested under `info`. The expiry is two digits,
+The balance is `amount`. The card's own details: last four, expiry, name,
+masked PAN, billing address: are nested under `info`. The expiry is two digits,
 as strings: `"08"`, `"29"`. Read `balance`, or insist on a four-digit year, and
 you get nothing back and no error.
 
@@ -51,10 +51,16 @@ stored will answer "customer was not found" for as long as you keep sending it.
 Anything stored against this issuer has to be filed under the environment that
 produced it.
 
-**5. A 402 is your money, never the cardholder's.**
+**5. One Visa card per customer per month.**
+`POST /cards` answers 400 with `only 1 visa card allowed in a month`. It is not
+documented and there is no counter to read, so the only way to learn the limit
+is to be refused. Surface it as the limit it is: a customer told "try again
+later" will try again later, and again, for weeks.
+
+**6. A 402 is your money, never the cardholder's.**
 `Insufficient merchant balance` means your own float at HeyQo is empty. It stops
 cards for everyone at once. Log it as an incident, show the customer a service
-message, and never pass their wording through — it states your balance.
+message, and never pass their wording through: it states your balance.
 
 ---
 
@@ -88,18 +94,18 @@ flat and they dominate:
 |---|---|---|
 | Card issuance | the fee, **and** any amount pre-loaded onto the card | The two are debited together, and only one of them is a fee |
 | Card load (deposit) | a **flat amount**, whatever the size | The single number that decides who can afford this product |
-| Card withdrawal | a flat amount again | Pulling money back off a card is not free — price it or do not offer it |
+| Card withdrawal | a flat amount again | Pulling money back off a card is not free: price it or do not offer it |
 | Monthly | ask; there may be none | If there is none, a monthly fee of your own is margin end to end |
 | Funding your float | possibly a % on deposits | Confirm it; it changes every load's true cost |
 
 Their published rates are not the whole story. Ask for each of these explicitly
-and confirm the answers against what actually leaves your float — an invoice
+and confirm the answers against what actually leaves your float: an invoice
 that comes back 3% above the amount you asked to fund is telling you something
 the rate card did not.
 
 A flat per-load fee is the whole design problem. Charge a percentage and small
 loads lose money; charge a flat fee and they are punitive. The fee has to be
-**the larger of a floor and a percentage** — the floor covers the flat cost, the
+**the larger of a floor and a percentage**: the floor covers the flat cost, the
 percentage takes over on amounts large enough for it to be the fairer of the
 two.
 
@@ -110,7 +116,7 @@ the minimum. Decide it from that, not from what feels tidy.
 
 Watch what a pre-load does to the cost figure you guard against. If they debit
 ten to place five on the card, your cost of *providing a card* is five, but ten
-left your float — guard against the ten, or a price of six passes a check it
+left your float: guard against the ten, or a price of six passes a check it
 should fail.
 
 **Record the provider's cost next to your price**, and refuse to save a price
@@ -122,18 +128,18 @@ every use is otherwise invisible in the revenue figures.
 ## Money-safety rules
 
 - **Load compensates on failure.** Debit the wallet, then ask the issuer. If the
-  issuer refuses, put it back in the same request and say so — money must never
+  issuer refuses, put it back in the same request and say so: money must never
   sit between two systems.
 - **Never refund a card balance you cannot verify.** Cancelling refunds the
   card's balance to the wallet. If your figure is stale and the issuer's is
   lower, the difference is money you just invented.
 - **The issuer's balance is the record.** There is no transaction list, so a
-  balance cannot be explained by adding up movements — it can only be read. They
+  balance cannot be explained by adding up movements: it can only be read. They
   do send an event when a card is charged, and the right response to it is to
   re-read the balance rather than to trust the amount on the event.
 - **File the card under its issuer.** A card outlives the setting that created
   it; route cancel, freeze, load and reveal by the card's own provider, never by
   whatever is configured today.
 - **Never store the PAN.** The number is shown in their hosted page and must not
-  cross your servers — that is what keeps you out of PCI scope. Log field
+  cross your servers: that is what keeps you out of PCI scope. Log field
   *names* when exploring a response, never values.
