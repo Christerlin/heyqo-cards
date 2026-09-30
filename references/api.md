@@ -279,6 +279,33 @@ Field by field, and each of these was learned the hard way:
   happened, and the holder would have to read the issuer's dashboard, which a
   holder cannot do.
 
+### Closing a card sends two events, and the order matters
+
+`card.termination.refund` arrives roughly **three seconds before**
+`card.terminated`, on every termination on record. The refund event carries the
+amount they actually sent back to your float; the terminated event is the one
+that tells you the card is closed.
+
+**Pay back the amount on the refund event, not the balance you hold.** A card
+showing $5.17 returned $0.69. That was not a stale read either: the issuer had
+quoted $5.17 itself one second earlier in a refusal, so nothing you could have
+synced would have seen it coming. Whatever they deduct, they deduct at closure.
+
+Two things follow:
+
+- **Handle either order.** Write whichever event arrives first, and let the
+  second one settle the difference. If the cancellation paid out first and the
+  refund event then reports *more*, that surplus is the holder's and nothing
+  else in the system will go looking for it.
+- **Keep your own balance as a floor.** One cancellation carried no refund event
+  at all. Paying only what a webhook you never received would have said leaves a
+  holder with nothing over a delivery failure, which is a far worse outcome than
+  absorbing a few dollars. Fall back, and log it loudly.
+
+And because there is no event id, guard any money you move on the second event
+against redelivery: a unique constraint catches a duplicated ledger row, but a
+wallet increment has nothing of the kind.
+
 ### Fees arrive with no event at all
 
 Their decline fee and their cross-border fee are taken straight off the balance

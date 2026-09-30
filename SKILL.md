@@ -156,7 +156,12 @@ every use is otherwise invisible in the revenue figures.
   sit between two systems.
 - **Never refund a card balance you cannot verify.** Cancelling refunds the
   card's balance to the wallet. If your figure is stale and the issuer's is
-  lower, the difference is money you just invented.
+  lower, the difference is money you just invented. On a closed card the figure
+  you want is on the `card.termination.refund` event, which arrives a few
+  seconds *before* the cancellation: pay back what they actually returned, and
+  keep your own balance only as a floor for the case where that event never
+  comes. A card showing $5.17 returned $0.69, and the holder was credited the
+  $5.17.
 - **The issuer's balance is the record.** There is no transaction list, so a
   balance cannot be explained by adding up movements: it can only be read. They
   do send an event when a card is charged, and the right response to it is to
