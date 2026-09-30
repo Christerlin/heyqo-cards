@@ -28,8 +28,16 @@ error anywhere.
   expiry. Write the row as pending, never as a placeholder.
 - Sandbox and production are separate worlds. A cardholder in one does not exist
   in the other.
-- A 402 is **your** float, not the cardholder's. Never pass its wording through
-  to a user; it states your balance.
+- An empty float is **your** money, not the cardholder's. Never pass its wording
+  through to a user; it states your balance. It arrives as a 402 with figures
+  **or** a bare 400 `insufficient fund`, so match on both, and keep it apart from
+  `please wait, try again later`, which is a throttle and means the opposite.
+- One float covers every brand and every operation, so a run of failures on one
+  card network is almost certainly the hour rather than the network.
+- The balance is not what the card can spend. They keep a minimum inside it, and
+  authorisation holds do not move it; the held figure appears only in the text of
+  a refusal. Show `amount - pending - minimum` or the holder pays a fee per
+  refused attempt.
 - The PAN must never cross your servers. It renders in their hosted page, and
   that is what keeps the integration in PCI SAQ A rather than SAQ D.
 

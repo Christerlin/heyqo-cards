@@ -136,6 +136,21 @@ There is **no transaction list**. The balance is the record: pull it, compare it
 with yours, and record the difference as one movement. Two purchases between two
 pulls arrive as one line: say so rather than inventing per-merchant detail.
 
+### `amount` is not what the card can spend
+
+Two amounts come out of it before anything can be authorised, and neither is
+reported anywhere:
+
+- **A minimum balance they keep.** Observed at **$1.00**. An authorisation that
+  would take the card below it is refused, and the refusal says so.
+- **Authorisation holds.** A hold does **not** move `amount`. A card reading
+  $26.00 with $17.93 held will refuse $17.93 and still read $26.00 afterwards.
+
+So the spendable figure is `amount - pending - minimum`, and the only place a
+hold is ever visible is the text of a refusal. Show the derived figure to the
+holder, keep `amount` beside it, and never offer a number the issuer will refuse:
+every refused attempt is charged for.
+
 ---
 
 ## 6. Money: deposit and withdraw
@@ -150,14 +165,44 @@ amount, out of your merchant float: with a flat deposit fee of `f`, depositing
 `n` costs you `n + f`. Withdrawing carries a flat fee too, so money pulled back
 off a card is not free.
 
-A **402** means your float is empty:
+### When your float is empty
+
+Two shapes, both meaning the same thing. The documented one is a **402** with the
+figures:
 
 ```
-Insufficient merchant balance. Required X.XX USD (X.XX USD). Current balance: 0.00 USD.
+402  Insufficient merchant balance. Required X.XX USD (X.XX USD). Current balance: 0.00 USD.
 ```
 
-That is your balance, not the cardholder's. Surface a service-unavailable
-message and keep their wording in the log.
+The one production actually saw is a bare **400** with no figures at all:
+
+```
+400  insufficient fund
+```
+
+Match on the status **or** the wording, `/insufficient\s+(merchant\s+balance|fund)/i`
+over the joined `message.error[]` and the raw body, because the status has
+already moved once and the wording is all the second shape gives you.
+
+It applies to **every call that spends**: a deposit, a load and a card creation
+alike. They hold one float for all brands and all operations, so a failure here
+says nothing about the card network, and a run of failures on one brand is
+almost certainly the clock rather than the brand.
+
+That figure is your balance, not the cardholder's. Surface a service-unavailable
+message, keep their wording in the log only, and alert somebody: this failure
+stops cards for everybody at once, so it is an incident and not a customer error.
+
+### When they are throttling you
+
+```
+400  please wait for few minutes, try again later
+```
+
+Seen after seven deposit attempts on one card inside a day. Check for this
+**before** the float test, `/please wait|try again later|too many/i`: the two
+answers are a few words apart and mean opposite things, and one customer asked to
+wait must not raise the alarm that means every customer is stopped.
 
 ---
 
@@ -185,14 +230,63 @@ Events seen in production:
 | Event | What to do with it |
 |---|---|
 | `customer.approved` / `customer.rejected` | the issuing bank's verdict on a cardholder |
+| `card.created` | the card is provisioned at last. **Handle it explicitly:** `POST /cards` returns an id and no number, and `GET /cards/{id}` answers "card not found" while it provisions, so if this falls through to a default branch the card sits pending, showing `0000`, with nothing left to move it |
 | `card.charged` / `card.funded` | money moved: **re-read the balance**, see below |
-| `card.declined` | nothing moved, so nothing to reconcile |
-| `card.terminated` | the card is closed |
+| `card.declined` | nothing moved, but do not discard it: the narration carries the spendable figure and the reason, and a refusal is charged for |
+| `card.terminated` | the card is closed and its balance is returned. **Check the amount:** it can come back short of what you refunded, and the difference is yours |
 
 **Do not add up the amount on a spend event.** There is no event id and no
 timestamp, so deliveries cannot be deduplicated or ordered, and arithmetic on
 those terms drifts. Read `GET /cards/{id}` and take the balance it reports; the
 issuer's figure is the record and a duplicate delivery then costs nothing.
+
+### What is actually on a `card.charged`
+
+None of this is documented, and they have described the shape to us two different
+ways. Log the whole payload once per charge and read a real one before writing
+the parser:
+
+```json
+{ "card_id": "...", "amount": 17.93, "transaction_ref": "...",
+  "metadata": {
+    "narration": "No sufficient funds for transaction and minimum balance @ $1.00 - Available balance: 8.07",
+    "merchant": {
+      "name": "Apple", "raw_name": "APPLE.COM/BILL  CROSS BORDER FEE",
+      "logo": "https://...", "mcc": "5734",
+      "category": { "primary": "Software", "accounting_category": "Subscriptions" }
+    } } }
+```
+
+Field by field, and each of these was learned the hard way:
+
+- **`metadata.merchant` is an object, not a string.** We were told it was a
+  string, read it as one, and got `undefined` on every real purchase: every card
+  line arrived with no merchant and the receipt said "chez un marchand" about a
+  charge from Apple. The name is at `metadata.merchant.name`.
+- **`transaction_ref`, not `event_id`.** The field we were promised has never
+  arrived. `transaction_ref` is what their dashboard shows, so it serves as both
+  the deduplication key and the reference a customer quotes: they are the same
+  thing, the identifier of the movement.
+- **`amount` is in major units and its sign is not to be trusted.** A charge has
+  arrived positive. Take the magnitude and get the direction from the event name.
+- **`logo` and `category` appear only on a named purchase.** A fee event carries
+  `raw_name` and nothing else, so every row needs a presentation that works with
+  no logo and no name. `category` can also arrive as an empty array, which is
+  their "nothing here": anything that is not a plain object carries no category.
+- **`metadata.narration` is where the reasons live.** "No sufficient funds for
+  transaction and cross-border fee @ $4.63, minimum balance @ $1.00", or the
+  available balance quoted above. Without it a refusal says only that it
+  happened, and the holder would have to read the issuer's dashboard, which a
+  holder cannot do.
+
+### Fees arrive with no event at all
+
+Their decline fee and their cross-border fee are taken straight off the balance
+with nothing published. The only evidence is the balance moving, so an
+unexplained debit is not an anomaly to log and drop: it is a fee, and the holder
+needs a line for it. Match it to the purchase it followed and label it as
+inferred, so a holder disputing a charge can tell which lines came from the
+issuer and which came from your reasoning.
 
 - **No timestamp and no event id**, so there is no replay protection and nothing
   to deduplicate on. Make applying the same verdict twice a no-op by

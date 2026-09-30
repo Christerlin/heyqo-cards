@@ -5,11 +5,12 @@ description: >-
   Platnova. Use this whenever the work touches HeyQo: creating a cardholder,
   issuing a card, loading or withdrawing from one, showing the full card number,
   reconciling a balance, or debugging a card error like "customer was not
-  found", a 402, a card stuck at 0000, or a secure-view page that will not lay
-  out. Also use it when choosing or pricing a virtual-card provider for Haiti or
-  the Caribbean, because the cost structure here decides whether the product
-  works. Everything in it was established against the live API; their
-  documentation does not describe most of it.
+  found", "insufficient fund", a 402, a card stuck at 0000, a refusal on a card
+  that visibly has the money, a fee that arrived with no event behind it, or a
+  secure-view page that will not lay out. Also use it when choosing or pricing a
+  virtual-card provider for Haiti or the Caribbean, because the cost structure
+  here decides whether the product works. Everything in it was established
+  against the live API; their documentation does not describe most of it.
 ---
 
 # HeyQo virtual cards
@@ -27,7 +28,7 @@ field read under the wrong name leaves a card frozen at a number nobody chose.
 
 ---
 
-## The five things that cost the most time
+## The things that cost the most time
 
 **1. Their responses are wrapped, and the useful part is in the body.**
 Every response is `{ message, data, type }`. Errors carry their reason in
@@ -57,10 +58,33 @@ documented and there is no counter to read, so the only way to learn the limit
 is to be refused. Surface it as the limit it is: a customer told "try again
 later" will try again later, and again, for weeks.
 
-**6. A 402 is your money, never the cardholder's.**
-`Insufficient merchant balance` means your own float at HeyQo is empty. It stops
-cards for everyone at once. Log it as an incident, show the customer a service
-message, and never pass their wording through: it states your balance.
+**6. A float failure is your money, never the cardholder's, and it does not
+always arrive as a 402.**
+`Insufficient merchant balance` means your own float at HeyQo is empty, and it
+stops cards for everybody at once. Their documented answer is a **402** carrying
+the figures. What production actually saw was a bare **400 `insufficient
+fund`**, on every call that spends: a load, a deposit and a card creation alike.
+Match on both, because the status has already moved once. Log it as an incident,
+show a service message, and never pass their wording through: it states your
+balance.
+
+**7. They hold one float for every brand and every operation.**
+So a failure tells you nothing about the card network, and the correlation you
+are about to believe is probably the clock. Four Mastercard loads failed while
+every Visa load on record had worked, which looked conclusive and was not: a
+card creation succeeded at 02:32 and another failed at 06:08, so what changed
+was the hour, not the brand. It cost an afternoon, a withdrawn feature and a
+refund to customers who had done nothing wrong. Before blaming the thing that
+failed, find the earliest success and the earliest failure and ask whether
+anything but time separates them.
+
+**8. A throttle is not a float failure.**
+"please wait for few minutes, try again later" is HeyQo slowing you down, seen
+after seven deposit attempts on one card inside a day. Recognise it first so it
+never reaches the float branch: the two are a few words apart in their API and a
+long way apart in meaning, one being your money gone and every customer stopped,
+the other one customer asked to wait. Raising the float alarm for a throttle is
+how an alarm stops being believed.
 
 ---
 
@@ -137,6 +161,24 @@ every use is otherwise invisible in the revenue figures.
   balance cannot be explained by adding up movements: it can only be read. They
   do send an event when a card is charged, and the right response to it is to
   re-read the balance rather than to trust the amount on the event.
+- **Show what can be spent, not the balance.** They refuse any authorisation that
+  would take a card below its minimum, and that minimum is inside the figure
+  their API reports. Show `balance - pending - minimum`, with the balance beside
+  it so nothing is hidden. A holder shown $6.75 tried $6.20 four times in ten
+  seconds, every attempt within the number on screen, every one refused, and
+  each refusal charged: $1.58 gone on a purchase that was never going to clear.
+- **A refusal is the only place an authorisation hold is visible.** A hold does
+  not move the balance they report, so a card holding $26.00 with $17.93 held
+  reads as $26.00 and refuses $17.93. The figure exists in one place, the
+  narration of the refusal: "No sufficient funds for transaction and minimum
+  balance @ $1.00 - Available balance: 8.07". Parse it, store it, prefer the
+  lower of the two, and expire it after a day: a hold either settles, and the
+  balance drops on its own, or it lapses, and nothing announces which.
+- **Price the refusals.** Each one costs a flat fee, so a card with a balance
+  just under what somebody keeps trying to spend drains itself a few tens of
+  cents at a time with no purchase ever completing. Show the spendable figure to
+  prevent it; think hard before freezing the card to prevent it, because a frozen
+  card is a worse outcome than a fee the holder can see and understand.
 - **File the card under its issuer.** A card outlives the setting that created
   it; route cancel, freeze, load and reveal by the card's own provider, never by
   whatever is configured today.
